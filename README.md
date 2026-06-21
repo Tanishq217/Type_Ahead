@@ -1,96 +1,294 @@
-# High-Performance Search Typeahead System
+# High-Performance Distributed Search Typeahead System
 
-A production-ready, distributed autocomplete search suggestion engine built with **FastAPI**, **PostgreSQL**, and a cached routing layer using **Consistent Hashing** across 3 **Redis** nodes. The system is engineered to handle high-concurrency read traffic (sub-5ms cached latency) and throttle database write pressure using an asynchronous **Redis-backed Write-Ahead Log (WAL) Batch Ingestor**.
+A production-ready, highly concurrent, distributed autocomplete search suggestion engine built with **FastAPI**, **PostgreSQL**, and a cached routing layer using **Consistent Hashing** across 3 **Redis** nodes. The system is designed to handle heavy lookup traffic with sub-5ms cached latencies, protect primary database I/O limits using an asynchronous **Redis-backed Write-Ahead Log (WAL) Batch Ingestor**, and compute real-time trends using a **Recency-Aware Ranking Algorithm**.
 
 ---
 
 ## 1. System Architecture
 
-The following diagram illustrates the components and request pathways of the typeahead system:
+The following diagram illustrates the components, background workers, and request pathways of the typeahead system:
 
 ```mermaid
 graph TD
-    UI[Frontend: HTML/JS/CSS Web App] -->|"GET /suggest?q=p&trending=true"| API[FastAPI Web Server]
-    UI -->|"POST /search {query}"| API
-    API -->|"1. Route cache key"| CH[consistent_hash.py]
-    CH -->|"2. Check cache"| RC[Redis Cache Nodes: 3 instances]
-    API -->|"3. DB Fallback on miss"| DB[(PostgreSQL Database)]
-    API -->|"4. Push search to WAL journal"| RJ[Redis Queue on redis-1]
+    UI[Frontend Web App] -->|GET /suggest| API[FastAPI Web Server]
+    UI -->|POST /search| API
+    API -->|1. Route cache key| CH[consistent_hash.py]
+    CH -->|2. Check cache| RC[Redis Cache Nodes - 3 instances]
+    API -->|3. DB Fallback on miss| DB[(PostgreSQL Database)]
+    API -->|4. Push search to WAL journal| RJ[Redis Queue on redis-1]
     
-    BW[Batch Writer Background Thread] -->|"5. Drain WAL & aggregate"| BW
-    BW -->|"6. Bulk upsert counts"| DB
-    BW -->|"7. Invalidate prefixes"| RC
+    BW[Batch Writer Daemon] -->|5. Drain WAL and aggregate| BW
+    BW -->|6. Bulk upsert counts| DB
+    BW -->|7. Invalidate prefixes| RC
     
-    TS[Trending Scheduler Worker] -->|"8. Run periodic scores"| DB
-    TS -->|"9. Refresh trending tables"| DB
-    TS -->|"10. Invalidate trending cache"| RC
+    TS[Trending Scheduler] -->|8. Run periodic scores| DB
+    TS -->|9. Refresh trending tables| DB
+    TS -->|10. Invalidate trending cache| RC
 ```
 
-### Key Technical Documentation
-For deep-dive academic and technical specifications, refer to the following documents inside the `/docs` directory:
-- [System Architecture & Choice Rationale](docs/architecture.md): Database and caching decision justifications, consistent hash ring math, and BatchWriter rollbacks.
-- [REST API Specifications](docs/api_spec.md): Endpoints payloads, request/response examples, and health checks schema.
-- [Load Testing & Optimization Report](docs/performance_report.md): Percentiles tail latencies, standard cache deviations, and bottleneck resolutions.
-- [Academic Integrity & Viva Prep Guide](docs/academic_integrity.md): Code algorithms walkthrough and time/space complexity analysis for mock interviews.
+---
+
+## 2. Project Features
+
+*   **Distributed Caching with Consistent Hashing**: Auto-routes lookup prefixes to one of three independent Redis nodes using a consistent hash ring with 200 virtual nodes per physical instance to ensure uniform key distribution.
+*   **Asynchronous WAL Batch Ingestor**: Prevents database transaction exhaustion under heavy search volume. Incoming searches are buffered into a crash-resilient Redis List queue (Write-Ahead Log), aggregated in memory by a background worker, and flushed to PostgreSQL in bulk updates.
+*   **Recency-Aware Trending Engine**: Computes search trends using a weighted score combining total search popularity ($\alpha = 0.2$) with recent activity logs from the last 2 hours ($\beta = 0.8 \times 10$). A background daemon precalculates scores to keep suggest routes blazing fast.
+*   **Fault-Tolerant Circuit Breakers**: Standardizes connections to cache instances. If any Redis container experiences an outage, its designated circuit breaker trips open, routing requests directly to the DB fallback to avoid cascading timeouts.
+*   **Premium Autocomplete Frontend**: A responsive, modern glassmorphic interface supporting debounced inputs (300ms), client-side session caching, keyboard arrow/enter navigation, and matching prefix highlighting.
 
 ---
 
-## 2. Quick Start (Docker Setup)
+## 3. Directory Structure
+
+```text
+├── Makefile                   # Convenient shortcuts for docker, ingestion, and tests
+├── docker-compose.yml         # Defines app, database, and 3 Redis containers
+├── .env                       # Environment variables config file
+├── .env.example               # Example template for configs
+├── backend/
+│   ├── Dockerfile             # Multi-stage image build for FastAPI web app
+│   ├── requirements.txt       # App requirements (FastAPI, SQLAlchemy, Redis, etc.)
+│   ├── app/
+│   │   ├── __init__.py
+│   │   ├── main.py            # FastAPI main entry points and metrics tracking
+│   │   ├── models.py          # SQLAlchemy models (SearchQuery, QueryTrending, SearchActivity)
+│   │   ├── database.py        # Relational database setup and session handlers
+│   │   ├── cache.py           # Distributed Cache manager and Circuit Breakers
+│   │   ├── consistent_hash.py # Custom consistent hashing ring implementation
+│   │   ├── batch_writer.py    # Redis WAL worker and database bulk upserts
+│   │   └── trending_scheduler.py # Background trending score scheduler
+│   └── scripts/
+│       ├── generate_dataset.py # Generates Zipfian power-law search query dataset (100k+)
+│       ├── ingest_data.py     # Seeds the database with generated dataset in seconds
+│       ├── load_test.py       # Multi-threaded suggest endpoint performance stress tester
+│       └── cache_distribution_check.py # Hashing distribution reporting tool
+└── frontend/
+    ├── index.html             # HTML5 structure with Theme Toggles
+    ├── style.css              # Custom Vanilla CSS design tokens & animations
+    └── app.js                 # Event delegation, debouncer, and session cache logic
+```
+
+---
+
+## 4. Setup & Running Instructions
 
 ### Prerequisites
-- Docker and Docker Compose installed.
+*   Docker and Docker Compose installed.
+*   Python 3.x installed on the host machine (only needed for generating mock dataset).
 
-### Setup Steps
+### Step-by-Step Execution
 
-1. **Spin Up the Containers**:
-   ```bash
-   make up
-   ```
-   This compiles and starts the FastAPI server (`web`), PostgreSQL primary database (`db`), and 3 independent Redis nodes (`redis-1`, `redis-2`, `redis-3`).
+#### 1. Start the Environment
+Run the following command to download, build, and run the FastAPI server, PostgreSQL database, and 3 Redis cache instances:
+```bash
+make up
+```
 
-2. **Generate the Ingestion Dataset (100k+ Queries)**:
-   ```bash
-   make generate-data
-   ```
-   This generates a power-law (Zipfian) distributed CSV dataset containing 105,000 unique realistic search queries at `backend/scripts/queries.csv`.
+#### 2. Generate the Dataset (100,000+ Queries)
+Execute the Python script on the host system to generate a power-law distributed CSV dataset:
+```bash
+make generate-data
+```
+This generates `backend/scripts/queries.csv` containing 105,000 unique queries with realistic search counts mimicking search engine statistics.
 
-3. **Populate the PostgreSQL Database**:
-   ```bash
-   make seed-data
-   ```
-   Seeds the database inside the container in under 2 seconds.
+#### 3. Populate the PostgreSQL Database
+Execute the database ingestion script inside the application container:
+```bash
+make seed-data
+```
+This drops any old schemas, sets up indexes (including functional lower-case indexing for fast prefix searches), and seeds the 105,000 entries using bulk inserts in under 2 seconds.
 
-4. **Access the Frontend App**:
-   Open [frontend/index.html](frontend/index.html) in your browser. Features a premium glassmorphic dark theme, search results, live performance diagnostics telemetry, trending metrics, and a floating dark/light mode toggle.
+#### 4. Access the Web Application
+Open the file `frontend/index.html` directly in your web browser. The app communicates with the running FastAPI container at `http://localhost:8000`.
 
 ---
 
-## 3. Telemetry & Verification Scripts
+## 5. Verification & Telemetry
 
-### Running Automated Test Suites
-Run the 15 unit and integration tests inside the container:
+### Running the Test Suite
+To verify backend correctness, run the integration and unit tests (covering Consistent Hashing, BatchWriter rollbacks, API routes, and Circuit Breakers):
 ```bash
 make test
 ```
 
-### Checking Cache Hashing Key Distribution
-Verify the uniform distribution of keys across the 3 Redis instances on the consistent hash ring (using 200 virtual nodes per server):
+### Checking Cache Key Distribution
+To verify the efficiency of the Consistent Hashing ring, execute the key distribution script:
 ```bash
 docker-compose exec web python scripts/cache_distribution_check.py
 ```
-*Expected Output: Standard deviation under 0.5% (nearly perfect uniform routing balance).*
+**Expected Output**:
+```text
+============================================================
+      CONSISTENT HASH RING KEY DISTRIBUTION REPORT (10,000 Keys)
+============================================================
+ Node: redis-1    | Key Count: 3381   | Share: 33.81%
+ Node: redis-2    | Key Count: 3301   | Share: 33.01%
+ Node: redis-3    | Key Count: 3318   | Share: 33.18%
+============================================================
+Distribution Standard Deviation: 0.3441%
+STATUS: SUCCESS (Key distribution is highly uniform and balanced!)
+```
 
 ### Running Performance Load Tests
-Execute the multi-threaded load test simulating concurrent suggest requests to check p50/p95/p99 tail latency percentiles:
+To stress test the system under concurrent query traffic:
 ```bash
 docker-compose exec web python scripts/load_test.py
 ```
-*Expected Output: Throughput >1,000 requests/sec with average latencies <15ms.*
+This launches 15 concurrent worker threads performing 1,200 total requests. 
+*   **Average Cache latency**: ~2.7 ms.
+*   **Average DB Fallback latency**: ~113.0 ms.
+*   **Throughput**: 1,000+ requests/second.
 
 ---
 
-## 4. Key Performance Highlights
+## 6. How to Use the Project (API & Usage Examples)
 
-- **Cache Read Latency Speedup**: Redis cache lookups resolve in **2.72 ms** compared to **113.02 ms** PostgreSQL fallbacks, showing a **41.5x read speedup**.
-- **Client-Side Caching**: Typing repeated prefixes resolves in **0.00 ms** directly via JavaScript in-memory lookup.
-- **Database Write Throttling**: The BatchWriter achieves an **80.0% database write reduction** (collapsing 5 sequential requests into 1 SQL upsert).
+Below are usage examples for the primary endpoints. You can query them using `curl` or tools like Postman.
+
+### A. Fetch Suggestion Autocomplete list (`GET /suggest`)
+Retrieves suggestions matching the input query string. By default, results are sorted by total historical popularity.
+
+```bash
+curl "http://localhost:8000/suggest?q=iphone"
+```
+
+**Expected JSON Response (Cache Hit)**:
+```json
+{
+  "suggestions": [
+    "iphone",
+    "iphone 15",
+    "iphone charger"
+  ],
+  "details": [
+    { "query": "iphone", "count": 800000, "trending_score": null },
+    { "query": "iphone 15", "count": 500200, "trending_score": null },
+    { "query": "iphone charger", "count": 210000, "trending_score": null }
+  ],
+  "latency_ms": 2.65,
+  "source": "cache",
+  "cache_node": "redis-2",
+  "circuit_state": "CLOSED"
+}
+```
+
+---
+
+### B. Fetch Trending Autocomplete Suggestions (`GET /suggest?q=...&trending=true`)
+By enabling the `trending` parameter, the API retrieves matches sorted by precalculated recency-weighted trending scores.
+
+```bash
+curl "http://localhost:8000/suggest?q=iphone&trending=true"
+```
+
+**Expected JSON Response**:
+```json
+{
+  "suggestions": [
+    "iphone 15",
+    "iphone"
+  ],
+  "details": [
+    { "query": "iphone 15", "count": 500200, "trending_score": 65.6 },
+    { "query": "iphone", "count": 800000, "trending_score": 10.2 }
+  ],
+  "latency_ms": 1.95,
+  "source": "cache",
+  "cache_node": "redis-2",
+  "circuit_state": "CLOSED"
+}
+```
+
+---
+
+### C. Submit Search Submission (`POST /search`)
+Submits a query when the user commits a search (e.g. presses enter). The server pushes this search immediately to the WAL queue and returns a fast response without blocking.
+
+```bash
+curl -X POST "http://localhost:8000/search" \
+     -H "Content-Type: application/json" \
+     -d '{"query": "rustlang tutorial"}'
+```
+
+**Expected JSON Response**:
+```json
+{
+  "message": "Searched"
+}
+```
+*Behind the scenes*: The query is buffered in the Redis WAL queue. Every 3 seconds, the BatchWriter grabs all queries, combines identical ones (reducing write operations), updates postgres `SearchQuery` table, and invalidates corresponding cache keys.
+
+---
+
+### D. Get Top 10 Trending Queries (`GET /trending`)
+Retrieves the overall top 10 trending terms across the system.
+
+```bash
+curl "http://localhost:8000/trending"
+```
+
+---
+
+### E. Check System Health status (`GET /health`)
+Exposes health statuses of the Postgres DB and the 3 independent Redis nodes.
+
+```bash
+curl "http://localhost:8000/health"
+```
+
+**Expected JSON Response**:
+```json
+{
+  "status": "healthy",
+  "database": "healthy",
+  "redis_nodes": {
+    "redis-1": "healthy",
+    "redis-2": "healthy",
+    "redis-3": "healthy"
+  },
+  "timestamp": "2026-06-22T00:01:14.283120"
+}
+```
+
+---
+
+### F. View Batch Writer Metrics (`GET /batch/stats`)
+Check database write metrics, saving summaries, and WAL queue size.
+
+```bash
+curl "http://localhost:8000/batch/stats"
+```
+
+**Expected JSON Response**:
+```json
+{
+  "metrics": {
+    "total_raw_writes_saved": 80,
+    "total_db_transactions": 20,
+    "queries_flushed": 100,
+    "redis_wal_pushes": 100,
+    "redis_wal_failures": 0,
+    "recovered_queries_count": 0
+  },
+  "flush_interval_seconds": 3.0,
+  "batch_size_limit": 100,
+  "memory_queue_size": 0,
+  "redis_wal_queue_size": 0,
+  "write_reduction_percentage": 80.0
+}
+```
+
+---
+
+## 7. Key Configuration Variables (.env)
+
+Below are the primary parameters configurable inside the `.env` file:
+
+*   `DATABASE_URL`: Connection string for PostgreSQL.
+*   `REDIS_NODES`: Comma-separated list of Redis node endpoints (e.g. `redis-1:6379,redis-2:6379,redis-3:6379`).
+*   `BATCH_SIZE_LIMIT`: Maximum size before pushing the WAL buffer to the database.
+*   `BATCH_FLUSH_INTERVAL`: Seconds between background WAL flushes to Postgres (default: `3.0`).
+*   `TRENDING_INTERVAL_SECONDS`: Seconds between trending scoring recalculations (default: `30.0`).
+*   `TRENDING_ALPHA`: Historical weight factor ($\alpha = 0.2$).
+*   `TRENDING_BETA`: Recency weight factor ($\beta = 0.8$).
+*   `RECENCY_WINDOW_HOURS`: Sliding window time frame for recency calculations (default: `2.0`).
