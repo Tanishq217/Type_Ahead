@@ -53,6 +53,42 @@ def generate_dataset(output_path: str, target_count: int = 105000):
             for sub in ["python", "iphone", "java", "react", "aws", "laptop"]:
                 unique_queries.add(f"{adj} {sub} {noun}")
 
+    # Generate generic trendy question queries
+    question_prefixes = ["what is", "how is", "what are", "will there", "how to", "why does"]
+    question_targets = [
+        "python used for", "machine learning work", "docker container", "kubernetes pod", "consistent hashing ring",
+        "redis cache eviction", "database replication", "rest api design", "fastapi performance", "postgresql index",
+        "iphone 15 pro max", "react state management", "javascript async await", "git merge conflict", "sql injection prevention",
+        "artificial intelligence future", "chatgpt safety controls", "cloud computing scalability", "cybersecurity threats",
+        "web development frameworks", "neural networks learning", "microservices architecture", "serverless function scale"
+    ]
+    for pref in question_prefixes:
+        for target in question_targets:
+            unique_queries.add(f"{pref} {target}")
+
+    head_queries = [
+        "what is python",
+        "what is consistent hashing",
+        "what is docker",
+        "what is redis",
+        "what is database indexing",
+        "how to learn coding",
+        "how to build typeahead",
+        "how to use docker compose",
+        "how to seed postgresql",
+        "what are virtual nodes",
+        "what are redis cache nodes",
+        "what are api requests",
+        "will there be a latency check",
+        "will there be database fallbacks",
+        "will there be consistent routing",
+        "how is data distributed",
+        "how is cache invalidated",
+        "how is trending score calculated"
+    ]
+    for hq in head_queries:
+        unique_queries.add(hq)
+
     # 2. Fill the remaining queries up to target_count using random combinations
     while len(unique_queries) < target_count:
         # Generate random combinations of words to represent long-tail searches
@@ -70,8 +106,15 @@ def generate_dataset(output_path: str, target_count: int = 105000):
             unique_queries.add(query)
 
     # Convert to list and shuffle to prevent ordering bias
-    query_list = list(unique_queries)[:target_count]
+    query_list = list(unique_queries)
     random.shuffle(query_list)
+    
+    # Position head queries at the front so they receive the highest frequency counts
+    for hq in head_queries:
+        if hq in query_list:
+            query_list.remove(hq)
+    query_list = head_queries + query_list
+    query_list = query_list[:target_count]
 
     # 3. Apply Zipfian power-law distribution for frequency counts
     # This creates a small number of ultra-popular "head" terms and a huge tail of low-frequency terms
