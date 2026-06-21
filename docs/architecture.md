@@ -8,20 +8,20 @@ This document details the architecture, component interactions, and technical de
 
 ```mermaid
 graph TD
-    UI[Frontend: HTML/JS/CSS Web App] -->|GET /suggest?q=p&trending=true| API[FastAPI Web Server]
-    UI -->|POST /search {query}| API
-    API -->|1. Route cache key| CH[consistent_hash.py]
-    CH -->|2. Check cache| RC[Redis Cache Nodes: 3 instances]
-    API -->|3. DB Fallback on miss| DB[(PostgreSQL Database)]
-    API -->|4. Push search to WAL journal| RJ[Redis Queue on redis-1]
+    UI[Frontend: HTML/JS/CSS Web App] -->|"GET /suggest?q=p&trending=true"| API[FastAPI Web Server]
+    UI -->|"POST /search {query}"| API
+    API -->|"1. Route cache key"| CH[consistent_hash.py]
+    CH -->|"2. Check cache"| RC[Redis Cache Nodes: 3 instances]
+    API -->|"3. DB Fallback on miss"| DB[(PostgreSQL Database)]
+    API -->|"4. Push search to WAL journal"| RJ[Redis Queue on redis-1]
     
-    BW[Batch Writer Background Thread] -->|5. Drain WAL & aggregate| BW
-    BW -->|6. Bulk upsert counts| DB
-    BW -->|7. Invalidate prefixes| RC
+    BW[Batch Writer Background Thread] -->|"5. Drain WAL & aggregate"| BW
+    BW -->|"6. Bulk upsert counts"| DB
+    BW -->|"7. Invalidate prefixes"| RC
     
-    TS[Trending Scheduler Worker] -->|8. Run periodic scores| DB
-    TS -->|9. Refresh trending tables| DB
-    TS -->|10. Invalidate trending cache| RC
+    TS[Trending Scheduler Worker] -->|"8. Run periodic scores"| DB
+    TS -->|"9. Refresh trending tables"| DB
+    TS -->|"10. Invalidate trending cache"| RC
 ```
 
 ### Component Breakdown
