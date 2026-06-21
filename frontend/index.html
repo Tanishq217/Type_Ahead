@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Typeahead System</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="background-glow"></div>
+    
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo">
+                <i class="fa-solid fa-bolt logo-icon"></i>
+                <h1>Antigravity<span>TypeAhead</span></h1>
+            </div>
+            <p class="subtitle">Distributed search suggestion engine featuring consistent hashing cache routing.</p>
+        </header>
+
+        <!-- Main Search Section -->
+        <main class="main-content">
+            <div class="search-section-wrapper">
+                <!-- Search Box Card -->
+                <div class="card search-card">
+                    <div class="search-bar-container">
+                        <i class="fa-solid fa-magnifying-glass search-icon"></i>
+                        <input type="text" id="search-input" placeholder="Search technology, gadgets, or tutorials..." autocomplete="off">
+                        <button id="search-btn"><i class="fa-solid fa-arrow-right"></i></button>
+                        <div id="loader" class="loader hidden"></div>
+                    </div>
+                    
+                    <!-- Autocomplete Dropdown -->
+                    <div id="suggestions-dropdown" class="suggestions-dropdown hidden">
+                        <ul id="suggestions-list">
+                            <!-- Populated dynamically -->
+                        </ul>
+                    </div>
+                </div>
+
+                <!-- API Response Banner -->
+                <div id="api-response" class="api-response hidden">
+                    <i class="fa-regular fa-circle-check"></i>
+                    <span id="api-response-text"></span>
+                </div>
+            </div>
+
+            <!-- Dashboard Grid -->
+            <div class="dashboard-grid">
+                <!-- Routing Diagnostics -->
+                <div class="card status-card">
+                    <h3><i class="fa-solid fa-microchip"></i> Cache Routing Diagnostics</h3>
+                    <div class="stats-grid">
+                        <div class="stat-box">
+                            <span class="stat-label">Response Latency</span>
+                            <span id="stat-latency" class="stat-value">0.00 <span class="unit">ms</span></span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Cache Status</span>
+                            <span id="stat-cache" class="stat-value">-</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Routed Cache Node</span>
+                            <span id="stat-node" class="stat-value">-</span>
+                        </div>
+                        <div class="stat-box">
+                            <span class="stat-label">Circuit State</span>
+                            <span id="stat-circuit" class="stat-value CLOSED">CLOSED</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Trending Queries -->
+                <div class="card trending-card">
+                    <h3><i class="fa-solid fa-fire"></i> Trending Searches</h3>
+                    <div id="trending-list" class="trending-list">
+                        <!-- Populated dynamically -->
+                        <div class="trending-placeholder">Loading trending searches...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Metrics Dashboard -->
+            <div class="card metrics-card">
+                <div class="metrics-header">
+                    <h3><i class="fa-solid fa-chart-line"></i> Batch Ingestion Metrics</h3>
+                    <button id="refresh-metrics-btn" class="btn-secondary"><i class="fa-solid fa-rotate"></i> Refresh</button>
+                </div>
+                <div class="metrics-body">
+                    <div class="metric-item">
+                        <div class="metric-meta">
+                            <span class="metric-title">DB Writes Reduced</span>
+                            <span id="metric-writes-saved" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-desc">Submissions aggregated in memory before writing to DB.</div>
+                    </div>
+                    <div class="metric-divider"></div>
+                    <div class="metric-item">
+                        <div class="metric-meta">
+                            <span class="metric-title">Queue Buffer Size</span>
+                            <span id="metric-queue-size" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-desc">Active queue size waiting to be flushed to PostgreSQL.</div>
+                    </div>
+                    <div class="metric-divider"></div>
+                    <div class="metric-item">
+                        <div class="metric-meta">
+                            <span class="metric-title">Database Flushes</span>
+                            <span id="metric-db-transactions" class="metric-val">0</span>
+                        </div>
+                        <div class="metric-desc">Total bulk inserts executed by BatchWriter service.</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>System Architecture Assignment | Phase 1 & 2 Completed</p>
+        </footer>
+    </div>
+
+    <!-- Application Script -->
+    <script src="app.js"></script>
+</body>
+</html>

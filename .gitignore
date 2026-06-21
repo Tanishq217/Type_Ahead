@@ -1,0 +1,32 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.env
+.venv
+venv/
+ENV/
+env/
+
+# Databases
+backend/tests/test.db
+test.db
+
+# Large generated datasets
+backend/scripts/queries.csv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Editor / IDE configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store

@@ -1,0 +1,93 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: typeahead-db
+    environment:
+      POSTGRES_USER: typeahead_user
+      POSTGRES_PASSWORD: typeahead_pass
+      POSTGRES_DB: typeahead_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - typeahead-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U typeahead_user -d typeahead_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-1:
+    image: redis:7-alpine
+    container_name: typeahead-redis-1
+    ports:
+      - "6379:6379"
+    networks:
+      - typeahead-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-2:
+    image: redis:7-alpine
+    container_name: typeahead-redis-2
+    ports:
+      - "6380:6379"
+    networks:
+      - typeahead-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis-3:
+    image: redis:7-alpine
+    container_name: typeahead-redis-3
+    ports:
+      - "6381:6379"
+    networks:
+      - typeahead-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: typeahead-web
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    volumes:
+      - ./backend:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://typeahead_user:typeahead_pass@db:5432/typeahead_db
+      - REDIS_NODES=redis-1:6379,redis-2:6379,redis-3:6379
+      - ENV=development
+    depends_on:
+      db:
+        condition: service_healthy
+      redis-1:
+        condition: service_healthy
+      redis-2:
+        condition: service_healthy
+      redis-3:
+        condition: service_healthy
+    networks:
+      - typeahead-network
+
+volumes:
+  postgres_data:
+
+networks:
+  typeahead-network:
+    driver: bridge
