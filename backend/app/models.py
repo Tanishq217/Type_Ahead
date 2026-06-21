@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Float
 from sqlalchemy.sql import func
 from .database import Base
 
@@ -25,3 +25,16 @@ class SearchActivity(Base):
     id = Column(Integer, primary_key=True, index=True)
     query_text = Column(String, nullable=False, index=True)
     timestamp = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+
+class QueryTrending(Base):
+    """
+    Stores pre-calculated trending scores and recent volume counts for search terms.
+    Periodically updated by the background trending scheduler.
+    """
+    __tablename__ = "query_trending"
+
+    query_text = Column(String, primary_key=True, index=True, nullable=False)
+    trending_score = Column(Float, index=True, nullable=False)
+    recent_count = Column(Integer, default=0, nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+

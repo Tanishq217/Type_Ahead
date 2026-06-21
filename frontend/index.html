@@ -38,6 +38,15 @@
                         <div id="loader" class="loader hidden"></div>
                     </div>
                     
+                    <!-- Mode Selector Toggles -->
+                    <div class="search-options">
+                        <label class="switch-container">
+                            <input type="checkbox" id="trending-mode-toggle">
+                            <span class="slider"></span>
+                            <span class="switch-label"><i class="fa-solid fa-arrow-trend-up"></i> Recency-Aware Trending Mode</span>
+                        </label>
+                    </div>
+                    
                     <!-- Autocomplete Dropdown -->
                     <div id="suggestions-dropdown" class="suggestions-dropdown hidden">
                         <ul id="suggestions-list">
@@ -50,6 +59,25 @@
                 <div id="api-response" class="api-response hidden">
                     <i class="fa-regular fa-circle-check"></i>
                     <span id="api-response-text"></span>
+                </div>
+            </div>
+
+            <!-- Comparison Dashboard (Demonstrates scoring difference side-by-side) -->
+            <div class="card comparison-card hidden" id="comparison-card">
+                <h3><i class="fa-solid fa-code-compare"></i> Real-time Suggestion Ranking Comparison</h3>
+                <p class="comparison-info">Comparing results for prefix: "<span id="comparison-prefix-val" style="color: var(--accent-cyan);"></span>"</p>
+                <div class="comparison-grid">
+                    <div class="comparison-column">
+                        <h4 class="col-title basic"><i class="fa-regular fa-star"></i> Basic Popularity</h4>
+                        <p class="col-subtitle">Sorted by all-time search count</p>
+                        <ul id="comparison-basic-list" class="comparison-list"></ul>
+                    </div>
+                    <div class="comparison-divider"></div>
+                    <div class="comparison-column">
+                        <h4 class="col-title trending"><i class="fa-solid fa-fire"></i> Recency-Aware Trending</h4>
+                        <p class="col-subtitle">Weighted combined score: 0.2*hist + 0.8*recent</p>
+                        <ul id="comparison-trending-list" class="comparison-list"></ul>
+                    </div>
                 </div>
             </div>
 
@@ -91,7 +119,7 @@
             <!-- Performance Metrics Dashboard -->
             <div class="card metrics-card">
                 <div class="metrics-header">
-                    <h3><i class="fa-solid fa-chart-line"></i> Batch Ingestion Metrics</h3>
+                    <h3><i class="fa-solid fa-chart-line"></i> Batch Ingestion & WAL Metrics</h3>
                     <button id="refresh-metrics-btn" class="btn-secondary"><i class="fa-solid fa-rotate"></i> Refresh</button>
                 </div>
                 <div class="metrics-body">
@@ -100,23 +128,23 @@
                             <span class="metric-title">DB Writes Reduced</span>
                             <span id="metric-writes-saved" class="metric-val">0</span>
                         </div>
-                        <div class="metric-desc">Submissions aggregated in memory before writing to DB.</div>
+                        <div class="metric-desc">Duplicate submissions aggregated in memory/Redis before write.</div>
                     </div>
                     <div class="metric-divider"></div>
                     <div class="metric-item">
                         <div class="metric-meta">
-                            <span class="metric-title">Queue Buffer Size</span>
+                            <span class="metric-title">Journal Queue WAL</span>
                             <span id="metric-queue-size" class="metric-val">0</span>
                         </div>
-                        <div class="metric-desc">Active queue size waiting to be flushed to PostgreSQL.</div>
+                        <div class="metric-desc">Total queries held in Redis journal queue (crash-resilient).</div>
                     </div>
                     <div class="metric-divider"></div>
                     <div class="metric-item">
                         <div class="metric-meta">
-                            <span class="metric-title">Database Flushes</span>
-                            <span id="metric-db-transactions" class="metric-val">0</span>
+                            <span class="metric-title">WAL Recovery Cleared</span>
+                            <span id="metric-recovered" class="metric-val">0</span>
                         </div>
-                        <div class="metric-desc">Total bulk inserts executed by BatchWriter service.</div>
+                        <div class="metric-desc">Unflushed queries successfully recovered from Redis journal at startup.</div>
                     </div>
                 </div>
             </div>
@@ -124,7 +152,7 @@
 
         <!-- Footer -->
         <footer class="app-footer">
-            <p>System Architecture Assignment | Phase 1 & 2 Completed</p>
+            <p>System Architecture Assignment | Phase 3 & 4 Completed</p>
         </footer>
     </div>
 

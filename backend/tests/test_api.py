@@ -8,6 +8,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import SearchQuery
 from app.cache import cache_manager
+from app.batch_writer import batch_writer
 
 # Setup SQLite test database
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test.db"
@@ -80,3 +81,55 @@ def test_cache_debug_endpoint():
     assert "routed_node" in data
     assert "circuit_state" in data
     assert "cache_status" in data
+
+def test_suggest_trending_mode():
+    response = client.get("/suggest?q=ip&trending=true")
+    assert response.status_code == 200
+    data = response.json()
+    assert "suggestions" in data
+    assert len(data["suggestions"]) == 3
+
+def test_suggest_compare():
+    response = client.get("/suggest/compare?q=ip")
+    assert response.status_code == 200
+    data = response.json()
+    assert "prefix" in data
+    assert data["prefix"] == "ip"
+    assert "basic_suggestions" in data
+    assert "trending_suggestions" in data
+
+def test_wal_recovery():
+    # Clear the queue in Redis
+    client_redis = batch_writer._get_redis_client()
+    if client_redis:
+        import app.batch_writer
+        original_session = app.batch_writer.SessionLocal
+        try:
+            # Override database session for the test worker
+            app.batch_writer.SessionLocal = TestingSessionLocal
+            
+            client_redis.delete(batch_writer.journal_key)
+            
+            # Seed directly to Redis
+            client_redis.rpush(batch_writer.journal_key, "wal-test-1")
+            client_redis.rpush(batch_writer.journal_key, "wal-test-2")
+            
+            assert client_redis.llen(batch_writer.journal_key) == 2
+            
+            # Execute recovery
+            batch_writer.recover_from_journal()
+            
+            # Check DB
+            db = TestingSessionLocal()
+            q1 = db.query(SearchQuery).filter(SearchQuery.query_text == "wal-test-1").first()
+            q2 = db.query(SearchQuery).filter(SearchQuery.query_text == "wal-test-2").first()
+            assert q1 is not None
+            assert q2 is not None
+            db.close()
+        finally:
+            app.batch_writer.SessionLocal = original_session
+            if client_redis:
+                client_redis.delete(batch_writer.journal_key)
+
+
+

@@ -10,6 +10,7 @@ const apiResponse = document.getElementById("api-response");
 const apiResponseText = document.getElementById("api-response-text");
 const trendingList = document.getElementById("trending-list");
 const refreshMetricsBtn = document.getElementById("refresh-metrics-btn");
+const trendingModeToggle = document.getElementById("trending-mode-toggle");
 
 // Diagnostics Elements
 const statLatency = document.getElementById("stat-latency");
@@ -17,10 +18,16 @@ const statCache = document.getElementById("stat-cache");
 const statNode = document.getElementById("stat-node");
 const statCircuit = document.getElementById("stat-circuit");
 
+// Comparison Dashboard Elements
+const comparisonCard = document.getElementById("comparison-card");
+const comparisonPrefixVal = document.getElementById("comparison-prefix-val");
+const comparisonBasicList = document.getElementById("comparison-basic-list");
+const comparisonTrendingList = document.getElementById("comparison-trending-list");
+
 // Ingestion Metrics Elements
 const metricWritesSaved = document.getElementById("metric-writes-saved");
 const metricQueueSize = document.getElementById("metric-queue-size");
-const metricDbTransactions = document.getElementById("metric-db-transactions");
+const metricRecovered = document.getElementById("metric-recovered");
 
 let debounceTimeout = null;
 let selectedIndex = -1;
@@ -31,6 +38,7 @@ searchInput.addEventListener("input", handleInput);
 searchInput.addEventListener("keydown", handleKeydown);
 searchBtn.addEventListener("click", submitSearch);
 refreshMetricsBtn.addEventListener("click", fetchMetrics);
+trendingModeToggle.addEventListener("change", handleInput); // Re-fetch on toggle
 
 // Click outside dropdown to close
 document.addEventListener("click", (e) => {
@@ -51,19 +59,28 @@ function handleInput() {
     if (!query) {
         closeDropdown();
         resetStats();
+        comparisonCard.classList.add("hidden");
         return;
     }
 
     loader.classList.remove("hidden");
 
     debounceTimeout = setTimeout(async () => {
+        const isTrendingMode = trendingModeToggle.checked;
+        
         try {
-            const res = await fetch(`${API_BASE_URL}/suggest?q=${encodeURIComponent(query)}`);
+            // 1. Fetch autocomplete suggestions for input dropdown
+            const suggestUrl = `${API_BASE_URL}/suggest?q=${encodeURIComponent(query)}&trending=${isTrendingMode}`;
+            const res = await fetch(suggestUrl);
             const data = await res.json();
             
             currentSuggestions = data.suggestions || [];
             renderSuggestions(currentSuggestions);
             updateDiagnostics(data);
+
+            // 2. Fetch comparative rankings side-by-side to show scoring differences
+            fetchRankingsComparison(query);
+
         } catch (err) {
             console.error("Error fetching suggestions:", err);
             updateDiagnostics({
@@ -78,6 +95,55 @@ function handleInput() {
     }, 250); // 250ms debounce
 }
 
+// Fetch side-by-side basic vs trending rankings for demonstration
+async function fetchRankingsComparison(prefix) {
+    try {
+        const compareUrl = `${API_BASE_URL}/suggest/compare?q=${encodeURIComponent(prefix)}`;
+        const res = await fetch(compareUrl);
+        const data = await res.json();
+        
+        comparisonPrefixVal.textContent = prefix;
+        
+        // Render basic list
+        comparisonBasicList.innerHTML = "";
+        const basicList = data.basic_suggestions || [];
+        if (basicList.length === 0) {
+            comparisonBasicList.innerHTML = `<li style="color: var(--text-muted);">No matches</li>`;
+        } else {
+            basicList.forEach((item) => {
+                const li = document.createElement("li");
+                li.textContent = item;
+                li.addEventListener("click", () => selectQuery(item));
+                comparisonBasicList.appendChild(li);
+            });
+        }
+        
+        // Render trending list
+        comparisonTrendingList.innerHTML = "";
+        const trendingList = data.trending_suggestions || [];
+        if (trendingList.length === 0) {
+            comparisonTrendingList.innerHTML = `<li style="color: var(--text-muted);">No matches</li>`;
+        } else {
+            trendingList.forEach((item) => {
+                const li = document.createElement("li");
+                li.textContent = item;
+                li.addEventListener("click", () => selectQuery(item));
+                comparisonTrendingList.appendChild(li);
+            });
+        }
+        
+        comparisonCard.classList.remove("hidden");
+    } catch (err) {
+        console.error("Failed to fetch comparative rankings:", err);
+    }
+}
+
+function selectQuery(query) {
+    searchInput.value = query;
+    closeDropdown();
+    submitSearch();
+}
+
 // Render autocomplete dropdown list
 function renderSuggestions(suggestions) {
     list.innerHTML = "";
@@ -88,14 +154,10 @@ function renderSuggestions(suggestions) {
         return;
     }
 
-    suggestions.forEach((item, index) => {
+    suggestions.forEach((item) => {
         const li = document.createElement("li");
         li.textContent = item;
-        li.addEventListener("click", () => {
-            searchInput.value = item;
-            closeDropdown();
-            submitSearch();
-        });
+        li.addEventListener("click", () => selectQuery(item));
         list.appendChild(li);
     });
 
@@ -150,6 +212,7 @@ async function submitSearch() {
     if (!query) return;
 
     closeDropdown();
+    comparisonCard.classList.add("hidden");
 
     try {
         const res = await fetch(`${API_BASE_URL}/search`, {
@@ -184,7 +247,7 @@ async function fetchTrending() {
         const trending = data.trending || [];
 
         if (trending.length === 0) {
-            trendingList.innerHTML = `<div class="trending-placeholder">No trending searches yet.</div>`;
+            trendingList.innerHTML = `<div class="trending-placeholder">No trending searches calculated yet.</div>`;
             return;
         }
 
@@ -219,7 +282,7 @@ async function fetchMetrics() {
         const metrics = data.batch_writer_metrics;
         metricWritesSaved.textContent = metrics.total_raw_writes_saved.toLocaleString();
         metricQueueSize.textContent = data.queue_size.toLocaleString();
-        metricDbTransactions.textContent = metrics.total_db_transactions.toLocaleString();
+        metricRecovered.textContent = metrics.recovered_queries_count.toLocaleString();
     } catch (err) {
         console.error("Failed to fetch metrics:", err);
     }

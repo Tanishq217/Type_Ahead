@@ -192,6 +192,76 @@ body {
     box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
 }
 
+/* Search Options (Toggles) */
+.search-options {
+    padding: 0.75rem 1rem 0.25rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.04);
+    margin-top: 0.25rem;
+}
+
+/* Custom Sliding Switch Toggle */
+.switch-container {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    position: relative;
+    user-select: none;
+}
+
+.switch-container input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.slider {
+    position: relative;
+    display: inline-block;
+    width: 36px;
+    height: 20px;
+    background-color: var(--text-muted);
+    border-radius: 20px;
+    transition: .3s;
+    margin-right: 0.5rem;
+}
+
+.slider:before {
+    position: absolute;
+    content: "";
+    height: 14px;
+    width: 14px;
+    left: 3px;
+    bottom: 3px;
+    background-color: var(--bg-dark);
+    border-radius: 50%;
+    transition: .3s;
+}
+
+input:checked + .slider {
+    background-color: var(--accent-cyan);
+}
+
+input:checked + .slider:before {
+    transform: translateX(16px);
+}
+
+.switch-label {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    transition: color 0.3s;
+}
+
+input:checked ~ .switch-label {
+    color: var(--accent-cyan);
+}
+
 /* Suggestions Dropdown */
 .suggestions-dropdown {
     position: absolute;
@@ -246,6 +316,92 @@ body {
 #suggestions-list li:hover::before,
 #suggestions-list li.selected::before {
     color: var(--accent-cyan);
+}
+
+/* Comparison Card (Side-by-Side Demonstration) */
+.comparison-card {
+    margin-top: -0.5rem;
+    border-color: rgba(6, 182, 212, 0.15);
+    box-shadow: 0 4px 20px rgba(6, 182, 212, 0.03);
+}
+
+.comparison-info {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: -0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.comparison-grid {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: stretch;
+    gap: 1.5rem;
+}
+
+@media (max-width: 600px) {
+    .comparison-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    .comparison-divider {
+        height: 1px;
+        width: 100%;
+    }
+}
+
+.comparison-column {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.col-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.col-title.basic { color: var(--accent-blue); }
+.col-title.trending { color: var(--accent-rose); }
+
+.col-subtitle {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: -0.25rem;
+    margin-bottom: 0.5rem;
+}
+
+.comparison-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.comparison-list li {
+    padding: 0.65rem 0.85rem;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.2s ease;
+}
+
+.comparison-list li:hover {
+    background: var(--bg-card-hover);
+    border-color: rgba(255, 255, 255, 0.08);
+}
+
+.comparison-divider {
+    width: 1px;
+    background: var(--border-color);
 }
 
 /* API Response Banner */
