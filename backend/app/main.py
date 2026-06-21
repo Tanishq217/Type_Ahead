@@ -21,6 +21,38 @@ async def lifespan(app: FastAPI):
     # Create tables if they do not exist
     Base.metadata.create_all(bind=engine)
     
+    # Auto-seed if the database is empty
+    from .database import SessionLocal
+    from .models import SearchQuery
+    db_session = SessionLocal()
+    try:
+        query_count = db_session.query(SearchQuery).count()
+        if query_count == 0:
+            print("Database is empty! Triggering automatic dataset generation and seeding...")
+            import sys
+            if "/app" not in sys.path:
+                sys.path.append("/app")
+            from scripts.generate_dataset import generate_dataset
+            from scripts.ingest_data import ingest_data
+            
+            csv_path = "/app/scripts/queries.csv"
+            # 1. Generate dataset if not already present
+            generate_dataset(csv_path, target_count=105000)
+            
+            # Close db_session to release database locks BEFORE running ingest_data (which drops/recreates tables)
+            db_session.close()
+            
+            # 2. Ingest data
+            ingest_data(csv_path)
+            print("Automatic dataset generation and seeding complete!")
+    except Exception as e:
+        print(f"Automatic seeding failed: {e}")
+    finally:
+        try:
+            db_session.close()
+        except Exception:
+            pass
+        
     # Start the batch writer background service
     batch_writer.start()
     
@@ -386,4 +418,9 @@ def get_batch_stats():
             2
         )
     }
+
+# Mount static files for the frontend at the root path operation last
+from fastapi.staticfiles import StaticFiles
+app.mount("/", StaticFiles(directory="/app/frontend", html=True), name="frontend")
+
 

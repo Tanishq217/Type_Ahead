@@ -74,32 +74,38 @@ graph TD
 
 ### Prerequisites
 *   Docker and Docker Compose installed.
-*   Python 3.x installed on the host machine (only needed for generating mock dataset).
 
-### Step-by-Step Execution
-
-#### 1. Start the Environment
-Run the following command to download, build, and run the FastAPI server, PostgreSQL database, and 3 Redis cache instances:
+### 🚀 One-Command Boot (Recommended for Grading)
+You can build, start the entire backend service cluster, auto-generate the Zipfian dataset, auto-seed PostgreSQL, and open the web browser frontend directly using a **single terminal command**:
 ```bash
-make up
+docker-compose up -d --build && open http://localhost:8000
 ```
+*(Alternatively, use `docker compose` instead of `docker-compose` if you are on Docker Compose V2).*
 
-#### 2. Generate the Dataset (100,000+ Queries)
-Execute the Python script on the host system to generate a power-law distributed CSV dataset:
-```bash
-make generate-data
-```
-This generates `backend/scripts/queries.csv` containing 105,000 unique queries with realistic search counts mimicking search engine statistics.
+#### What this single command does:
+1.  **Starts 5 Containerized Services**: Boots the FastAPI web app container (`typeahead-web`), PostgreSQL primary database container (`typeahead-db`), and 3 independent Redis cache instances (`redis-1`, `redis-2`, `redis-3`) in the background.
+2.  **Automatic Ingest & Seeding**: The FastAPI application automatically detects that PostgreSQL is unseeded on startup. It generates the power-law (Zipfian) distributed mock dataset of **105,000 queries** and seeds the tables using bulk insert in under 2 seconds.
+3.  **Launches the Frontend UI**: Opens your default browser directly to `http://localhost:8000`, which serves the premium glassmorphic frontend UI directly from the FastAPI container.
 
-#### 3. Populate the PostgreSQL Database
-Execute the database ingestion script inside the application container:
-```bash
-make seed-data
-```
-This drops any old schemas, sets up indexes (including functional lower-case indexing for fast prefix searches), and seeds the 105,000 entries using bulk inserts in under 2 seconds.
+---
 
-#### 4. Access the Web Application
-Open the file `frontend/index.html` directly in your web browser. The app communicates with the running FastAPI container at `http://localhost:8000`.
+### Step-by-Step Manual Execution (Optional)
+If you prefer to run each step manually:
+
+1.  **Start the Services**:
+    ```bash
+    make up
+    ```
+2.  **Generate the Ingestion CSV**:
+    ```bash
+    make generate-data
+    ```
+3.  **Seed the Database Tables**:
+    ```bash
+    make seed-data
+    ```
+4.  **Access the Web Interface**:
+    Navigate to `http://localhost:8000` in your web browser.
 
 ---
 

@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = window.location.origin;
 
 // Client-Side Session Cache to optimize autocomplete and save API requests
 const clientCache = {
