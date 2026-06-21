@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel, Field
-from fastapi import FastAPI, Depends, Query
+from fastapi import FastAPI, Depends, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -208,7 +208,7 @@ def submit_search(payload: SearchRequest):
     """
     query_text = payload.query.strip()
     if not query_text:
-        return {"message": "Invalid query"}, 400
+        raise HTTPException(status_code=400, detail="Invalid query")
         
     batch_writer.add_query(query_text)
     return {"message": "Searched"}
