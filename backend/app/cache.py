@@ -2,6 +2,7 @@ import os
 import time
 import json
 import logging
+import threading
 from typing import Dict, List, Optional, Tuple
 import redis
 from .consistent_hash import ConsistentHashRing
@@ -54,6 +55,41 @@ class CircuitBreaker:
         return True
 
 
+class CacheStatsTracker:
+    """
+    Thread-safe tracker to log distributed cache hit rates and prefix telemetry.
+    """
+    def __init__(self):
+        self.hits = 0
+        self.misses = 0
+        self.hits_by_prefix: Dict[str, int] = {}
+        self.misses_by_prefix: Dict[str, int] = {}
+        self.lock = threading.Lock()
+
+    def record_hit(self, prefix: str):
+        with self.lock:
+            self.hits += 1
+            self.hits_by_prefix[prefix] = self.hits_by_prefix.get(prefix, 0) + 1
+
+    def record_miss(self, prefix: str):
+        with self.lock:
+            self.misses += 1
+            self.misses_by_prefix[prefix] = self.misses_by_prefix.get(prefix, 0) + 1
+
+    def get_stats(self) -> dict:
+        with self.lock:
+            total = self.hits + self.misses
+            hit_rate = (self.hits / total) if total > 0 else 0.0
+            return {
+                "total_requests": total,
+                "hits": self.hits,
+                "misses": self.misses,
+                "hit_rate": round(hit_rate, 4),
+                "hits_by_prefix": dict(sorted(self.hits_by_prefix.items(), key=lambda x: x[1], reverse=True)[:10]),
+                "misses_by_prefix": dict(sorted(self.misses_by_prefix.items(), key=lambda x: x[1], reverse=True)[:10])
+            }
+
+
 class CacheManager:
     """
     Manages connections to multiple Redis nodes, handles key routing using consistent hashing,
@@ -65,13 +101,13 @@ class CacheManager:
         self.clients: Dict[str, redis.Redis] = {}
         self.circuit_breakers: Dict[str, CircuitBreaker] = {}
         self.node_names: List[str] = []
+        self.stats = CacheStatsTracker()
 
         for endpoint in redis_endpoints.split(","):
             if not endpoint:
                 continue
             try:
                 host, port = endpoint.split(":")
-                # Node name is mapped to its address/container hostname
                 node_name = host
                 self.node_names.append(node_name)
                 
@@ -104,31 +140,38 @@ class CacheManager:
 
     def get(self, key: str) -> Optional[List[str]]:
         """Gets a list of suggestions from the cache using consistent hash routing."""
+        prefix = key.split(":")[-1]
+        
         if not self.node_names:
+            self.stats.record_miss(prefix)
             return None
 
         try:
             node = self.ring.get_node(key)
         except Exception as e:
             logger.error(f"Consistent hash routing failed: {e}")
+            self.stats.record_miss(prefix)
             return None
 
         client = self.clients.get(node)
         cb = self.circuit_breakers.get(node)
 
         if not client or not cb or not cb.allow_request():
-            # Bypass cache (either node not found or circuit is open)
+            self.stats.record_miss(prefix)
             return None
 
         try:
             val = client.get(key)
-            # Request succeeded, notify circuit breaker
-            cb.record_success()
             if val:
+                cb.record_success()
+                self.stats.record_hit(prefix)
                 return json.loads(val)
+            else:
+                self.stats.record_miss(prefix)
         except redis.RedisError as e:
             logger.warning(f"Cache node {node} error during GET: {e}")
             cb.record_failure()
+            self.stats.record_miss(prefix)
         
         return None
 
@@ -187,5 +230,5 @@ class CacheManager:
         return False
 
 
-# Singleton instance to be imported across backend components
+# Singleton instance
 cache_manager = CacheManager()

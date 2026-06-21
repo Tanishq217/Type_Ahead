@@ -1,5 +1,23 @@
 const API_BASE_URL = "http://localhost:8000";
 
+// Client-Side Session Cache to optimize autocomplete and save API requests
+const clientCache = {
+    cache: {},
+    get(key) {
+        const entry = this.cache[key];
+        if (entry && (Date.now() - entry.timestamp < 60000)) { // 1-minute client TTL
+            return entry.data;
+        }
+        return null;
+    },
+    set(key, data) {
+        this.cache[key] = {
+            data: data,
+            timestamp: Date.now()
+        };
+    }
+};
+
 // DOM Elements
 const searchInput = document.getElementById("search-input");
 const searchBtn = document.getElementById("search-btn");
@@ -11,6 +29,7 @@ const apiResponseText = document.getElementById("api-response-text");
 const trendingList = document.getElementById("trending-list");
 const refreshMetricsBtn = document.getElementById("refresh-metrics-btn");
 const trendingModeToggle = document.getElementById("trending-mode-toggle");
+const themeToggleBtn = document.getElementById("theme-toggle-btn");
 
 // Diagnostics Elements
 const statLatency = document.getElementById("stat-latency");
@@ -38,7 +57,29 @@ searchInput.addEventListener("input", handleInput);
 searchInput.addEventListener("keydown", handleKeydown);
 searchBtn.addEventListener("click", submitSearch);
 refreshMetricsBtn.addEventListener("click", fetchMetrics);
-trendingModeToggle.addEventListener("change", handleInput); // Re-fetch on toggle
+trendingModeToggle.addEventListener("change", handleInput); // Re-fetch on mode toggles
+
+// Event delegation on suggestions dropdown list click
+list.addEventListener("click", (e) => {
+    const li = e.target.closest("li");
+    if (li) {
+        const query = li.getAttribute("data-query");
+        if (query) {
+            selectQuery(query);
+        }
+    }
+});
+
+// Floating Light/Dark Mode theme toggle
+themeToggleBtn.addEventListener("click", () => {
+    document.body.classList.toggle("light-theme");
+    const icon = themeToggleBtn.querySelector("i");
+    if (document.body.classList.contains("light-theme")) {
+        icon.className = "fa-solid fa-sun";
+    } else {
+        icon.className = "fa-solid fa-moon";
+    }
+});
 
 // Click outside dropdown to close
 document.addEventListener("click", (e) => {
@@ -47,9 +88,11 @@ document.addEventListener("click", (e) => {
     }
 });
 
-// Initial load
+// Periodic Updates (Lazy load trending lists)
 fetchTrending();
 fetchMetrics();
+setInterval(fetchTrending, 15000); // Poll trending list every 15s to keep list updated
+setInterval(fetchMetrics, 5000); // Poll metrics list every 5s
 
 // Debounced typing handler
 function handleInput() {
@@ -67,18 +110,39 @@ function handleInput() {
 
     debounceTimeout = setTimeout(async () => {
         const isTrendingMode = trendingModeToggle.checked;
-        
+        const clientCacheKey = `${isTrendingMode ? 'trending' : 'basic'}:${query.toLowerCase()}`;
+
+        // 1. Client-Side Cache Check
+        const cachedPayload = clientCache.get(clientCacheKey);
+        if (cachedPayload) {
+            currentSuggestions = cachedPayload.details || [];
+            renderSuggestions(currentSuggestions, query);
+            updateDiagnostics({
+                latency_ms: "0.00",
+                source: "client_cache",
+                cache_node: cachedPayload.cache_node || "none",
+                circuit_state: cachedPayload.circuit_state || "CLOSED"
+            });
+            loader.classList.add("hidden");
+            fetchRankingsComparison(query);
+            return;
+        }
+
         try {
-            // 1. Fetch autocomplete suggestions for input dropdown
+            // 2. Cache Miss: Fetch suggestions from backend
             const suggestUrl = `${API_BASE_URL}/suggest?q=${encodeURIComponent(query)}&trending=${isTrendingMode}`;
+            const startFetchTime = Date.now();
             const res = await fetch(suggestUrl);
             const data = await res.json();
             
-            currentSuggestions = data.suggestions || [];
-            renderSuggestions(currentSuggestions);
+            // Set client cache
+            clientCache.set(clientCacheKey, data);
+
+            currentSuggestions = data.details || [];
+            renderSuggestions(currentSuggestions, query);
             updateDiagnostics(data);
 
-            // 2. Fetch comparative rankings side-by-side to show scoring differences
+            // Fetch comparisons side-by-side
             fetchRankingsComparison(query);
 
         } catch (err) {
@@ -92,10 +156,43 @@ function handleInput() {
         } finally {
             loader.classList.add("hidden");
         }
-    }, 250); // 250ms debounce
+    }, 350); // 350ms debounce
 }
 
-// Fetch side-by-side basic vs trending rankings for demonstration
+// Bolds the matching query prefix
+function highlightMatch(text, prefix) {
+    if (!prefix) return escapeHTML(text);
+    const escapedPrefix = prefix.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'); // regex escape
+    const regex = new RegExp(`^(${escapedPrefix})`, 'i');
+    return text.replace(regex, '<strong>$1</strong>');
+}
+
+// Render autocomplete dropdown list
+function renderSuggestions(details, prefix) {
+    list.innerHTML = "";
+    selectedIndex = -1;
+
+    if (details.length === 0) {
+        closeDropdown();
+        return;
+    }
+
+    details.forEach((item) => {
+        const li = document.createElement("li");
+        li.setAttribute("data-query", item.query);
+        
+        const highlightedText = highlightMatch(item.query, prefix);
+        const searchCount = item.count ? item.count.toLocaleString() : "0";
+        const countBadge = `<span class="badge">${searchCount} searches</span>`;
+        
+        li.innerHTML = `<span class="suggest-text">${highlightedText}</span>${countBadge}`;
+        list.appendChild(li);
+    });
+
+    dropdown.classList.remove("hidden");
+}
+
+// Fetch side-by-side rankings for comparisons card
 async function fetchRankingsComparison(prefix) {
     try {
         const compareUrl = `${API_BASE_URL}/suggest/compare?q=${encodeURIComponent(prefix)}`;
@@ -108,12 +205,12 @@ async function fetchRankingsComparison(prefix) {
         comparisonBasicList.innerHTML = "";
         const basicList = data.basic_suggestions || [];
         if (basicList.length === 0) {
-            comparisonBasicList.innerHTML = `<li style="color: var(--text-muted);">No matches</li>`;
+            comparisonBasicList.innerHTML = `<li style="color: var(--text-muted); font-size: 0.85rem;">No matches</li>`;
         } else {
             basicList.forEach((item) => {
                 const li = document.createElement("li");
-                li.textContent = item;
-                li.addEventListener("click", () => selectQuery(item));
+                li.setAttribute("data-query", item);
+                li.innerHTML = `<span>${highlightMatch(item, prefix)}</span>`;
                 comparisonBasicList.appendChild(li);
             });
         }
@@ -122,12 +219,12 @@ async function fetchRankingsComparison(prefix) {
         comparisonTrendingList.innerHTML = "";
         const trendingList = data.trending_suggestions || [];
         if (trendingList.length === 0) {
-            comparisonTrendingList.innerHTML = `<li style="color: var(--text-muted);">No matches</li>`;
+            comparisonTrendingList.innerHTML = `<li style="color: var(--text-muted); font-size: 0.85rem;">No matches</li>`;
         } else {
             trendingList.forEach((item) => {
                 const li = document.createElement("li");
-                li.textContent = item;
-                li.addEventListener("click", () => selectQuery(item));
+                li.setAttribute("data-query", item);
+                li.innerHTML = `<span>${highlightMatch(item, prefix)}</span>`;
                 comparisonTrendingList.appendChild(li);
             });
         }
@@ -141,27 +238,8 @@ async function fetchRankingsComparison(prefix) {
 function selectQuery(query) {
     searchInput.value = query;
     closeDropdown();
+    comparisonCard.classList.add("hidden");
     submitSearch();
-}
-
-// Render autocomplete dropdown list
-function renderSuggestions(suggestions) {
-    list.innerHTML = "";
-    selectedIndex = -1;
-
-    if (suggestions.length === 0) {
-        closeDropdown();
-        return;
-    }
-
-    suggestions.forEach((item) => {
-        const li = document.createElement("li");
-        li.textContent = item;
-        li.addEventListener("click", () => selectQuery(item));
-        list.appendChild(li);
-    });
-
-    dropdown.classList.remove("hidden");
 }
 
 // Keyboard navigation (Up/Down/Enter)
@@ -180,7 +258,8 @@ function handleKeydown(e) {
     } else if (e.key === "Enter") {
         e.preventDefault();
         if (selectedIndex >= 0 && selectedIndex < items.length) {
-            searchInput.value = items[selectedIndex].textContent;
+            const query = items[selectedIndex].getAttribute("data-query");
+            searchInput.value = query;
             closeDropdown();
         }
         submitSearch();
@@ -189,12 +268,13 @@ function handleKeydown(e) {
     }
 }
 
-// Highlight active item
+// Highlight active items
 function updateSelection(items) {
     for (let i = 0; i < items.length; i++) {
         if (i === selectedIndex) {
             items[i].classList.add("selected");
-            searchInput.value = items[i].textContent; // Sync text input
+            const query = items[i].getAttribute("data-query");
+            searchInput.value = query; // Sync text input
         } else {
             items[i].classList.remove("selected");
         }
@@ -226,7 +306,7 @@ async function submitSearch() {
         if (res.ok) {
             showResponseBanner(`Searched: "${query}"`);
             
-            // Re-fetch trending and metrics to show updates after a brief timeout (for the batch to process)
+            // Wait for buffer flush
             setTimeout(() => {
                 fetchTrending();
                 fetchMetrics();
@@ -299,6 +379,9 @@ function updateDiagnostics(data) {
         statCache.classList.add("hit");
     } else if (data.source === "database") {
         statCache.classList.add("miss");
+    } else if (data.source === "client_cache") {
+        statCache.classList.add("hit");
+        statCache.textContent = "CLIENT CACHE";
     }
 
     // Routed node name

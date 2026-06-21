@@ -88,8 +88,17 @@ def get_suggestions(
     # Retrieve from Cache
     cached_results = cache_manager.get(cache_key)
     if cached_results is not None:
+        # Backward-compatible parsing
+        if cached_results and isinstance(cached_results[0], dict):
+            suggestions = [item["query"] for item in cached_results]
+            details = cached_results
+        else:
+            suggestions = cached_results
+            details = [{"query": q, "count": 0} for q in suggestions]
+            
         return {
-            "suggestions": cached_results,
+            "suggestions": suggestions,
+            "details": details,
             "latency_ms": round((time.time() - start_time) * 1000, 2),
             "source": "cache",
             "cache_node": routed_node,
@@ -101,7 +110,6 @@ def get_suggestions(
     
     if trending:
         # Trending Mode: Join SearchQuery with precalculated QueryTrending
-        # Fallback to total_count * alpha (0.2) if query is not in trending table
         alpha = float(os.getenv("TRENDING_ALPHA", "0.2"))
         db_results = (
             db.query(SearchQuery)
@@ -125,19 +133,30 @@ def get_suggestions(
         )
         
     db_latency = time.time() - db_start_time
+    
     suggestions = [item.query_text for item in db_results]
+    details = [
+        {
+            "query": item.query_text,
+            "count": item.total_count,
+            "trending_score": float(item.trending_score) if hasattr(item, "trending_score") and item.trending_score else None
+        }
+        for item in db_results
+    ]
 
-    # Store back to the routed Redis cache node
-    cache_manager.set(cache_key, suggestions, ttl=300)
+    # Store structured details back into the routed Redis cache node
+    cache_manager.set(cache_key, details, ttl=300)
 
     return {
         "suggestions": suggestions,
+        "details": details,
         "latency_ms": round((time.time() - start_time) * 1000, 2),
         "source": "database",
         "cache_node": routed_node,
         "circuit_state": circuit_state,
         "db_latency_ms": round(db_latency * 1000, 2)
     }
+
 
 @app.get("/suggest/compare")
 def compare_suggestions(
@@ -207,6 +226,15 @@ def cache_debug(
     routed_node, circuit_state = cache_manager.get_route_info(cache_key)
     
     cached_content = cache_manager.get(cache_key)
+    
+    # Extract query strings if cached items are in structured format
+    suggestions_strings = None
+    if cached_content is not None:
+        if cached_content and isinstance(cached_content[0], dict):
+            suggestions_strings = [item["query"] for item in cached_content]
+        else:
+            suggestions_strings = cached_content
+            
     cache_status = "HIT" if cached_content is not None else "MISS"
 
     return CacheDebugResponse(
@@ -214,7 +242,7 @@ def cache_debug(
         routed_node=routed_node,
         circuit_state=circuit_state,
         cache_status=cache_status,
-        cached_suggestions=cached_content
+        cached_suggestions=suggestions_strings
     )
 
 @app.get("/trending")
@@ -260,7 +288,6 @@ def get_system_metrics():
     """
     Exposes metrics detailing database write reduction achieved through batch writing.
     """
-    # Fetch queue sizes
     redis_qsize = 0
     client = batch_writer._get_redis_client()
     if client:
@@ -277,3 +304,86 @@ def get_system_metrics():
         "memory_queue_size": batch_writer.memory_backup_queue.qsize(),
         "redis_queue_size": redis_qsize
     }
+
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """
+    System health check. Pings PostgreSQL database and all configured Redis nodes.
+    Returns 503 if any service is down.
+    """
+    from sqlalchemy import text
+    from fastapi import Response, status
+    import json
+
+
+    db_status = "healthy"
+    redis_status = {}
+    is_healthy = True
+
+    # 1. Check PostgreSQL
+    try:
+        db.execute(text("SELECT 1"))
+    except Exception as e:
+        db_status = f"unhealthy: {e}"
+        is_healthy = False
+
+    # 2. Check Redis nodes
+    for node in cache_manager.node_names:
+        client = cache_manager.clients.get(node)
+        if client:
+            try:
+                client.ping()
+                redis_status[node] = "healthy"
+            except Exception as e:
+                redis_status[node] = f"unhealthy: {e}"
+                is_healthy = False
+        else:
+            redis_status[node] = "unhealthy: client not initialized"
+            is_healthy = False
+
+    payload = {
+        "status": "healthy" if is_healthy else "unhealthy",
+        "database": db_status,
+        "redis_nodes": redis_status,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+
+    # Return 503 Service Unavailable if unhealthy
+    if not is_healthy:
+        return Response(content=json.dumps(payload), status_code=status.HTTP_503_SERVICE_UNAVAILABLE, media_type="application/json")
+        
+    return payload
+
+@app.get("/cache/stats")
+def get_cache_stats():
+    """
+    Returns detailed distributed cache hit, miss, and routing telemetry.
+    """
+    return cache_manager.stats.get_stats()
+
+@app.get("/batch/stats")
+def get_batch_stats():
+    """
+    Returns BatchWriter buffering, WAL journal queues, and write reduction performance statistics.
+    """
+    redis_qsize = 0
+    client = batch_writer._get_redis_client()
+    if client:
+        try:
+            redis_qsize = client.llen(batch_writer.journal_key)
+        except Exception:
+            pass
+
+    return {
+        "metrics": batch_writer.metrics,
+        "flush_interval_seconds": batch_writer.flush_interval,
+        "batch_size_limit": batch_writer.batch_limit,
+        "memory_queue_size": batch_writer.memory_backup_queue.qsize(),
+        "redis_wal_queue_size": redis_qsize,
+        "write_reduction_percentage": round(
+            (batch_writer.metrics["total_raw_writes_saved"] / batch_writer.metrics["queries_flushed"] * 100)
+            if batch_writer.metrics["queries_flushed"] > 0 else 0.0,
+            2
+        )
+    }
+

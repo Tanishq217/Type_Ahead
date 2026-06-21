@@ -703,3 +703,114 @@ input:checked ~ .switch-label {
     font-size: 0.85rem;
     margin-top: 1rem;
 }
+
+/* Floating Theme Toggle Button */
+.theme-toggle-btn {
+    position: absolute;
+    top: 2rem;
+    right: 2rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    color: var(--text-primary);
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    font-size: 1.25rem;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    z-index: 100;
+}
+
+.theme-toggle-btn:hover {
+    background: var(--bg-card-hover);
+    transform: scale(1.05);
+}
+
+/* Telemetry Search Count Badge */
+.badge {
+    font-size: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    padding: 0.2rem 0.5rem;
+    border-radius: 6px;
+    color: var(--text-secondary);
+    margin-left: auto; /* Push badge to the right */
+    transition: all 0.2s;
+}
+
+#suggestions-list li:hover .badge,
+#suggestions-list li.selected .badge {
+    border-color: rgba(6, 182, 212, 0.2);
+    color: var(--accent-cyan);
+}
+
+/* Light Theme Variables & Overrides */
+body.light-theme {
+    --bg-dark: #f5f5fc;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-card-hover: rgba(0, 0, 0, 0.04);
+    --border-color: rgba(0, 0, 0, 0.08);
+    --border-active: rgba(6, 182, 212, 0.5);
+    --text-primary: #121226;
+    --text-secondary: #5c5c7d;
+    --text-muted: #8888a5;
+    --glow-shadow: 0 8px 32px 0 rgba(6, 182, 212, 0.05);
+}
+
+body.light-theme .background-glow {
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.08) 0%, rgba(59, 130, 246, 0.03) 60%, rgba(0, 0, 0, 0) 100%);
+}
+
+body.light-theme .suggestions-dropdown {
+    background: rgba(255, 255, 255, 0.98);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.1);
+}
+
+body.light-theme #suggestions-list li {
+    border-bottom-color: rgba(0, 0, 0, 0.03);
+}
+
+body.light-theme #suggestions-list li:hover,
+body.light-theme #suggestions-list li.selected {
+    background: rgba(6, 182, 212, 0.06);
+}
+
+body.light-theme .trending-item {
+    background: rgba(0, 0, 0, 0.015);
+    border-color: rgba(0, 0, 0, 0.03);
+}
+
+body.light-theme .stat-box {
+    background: rgba(0, 0, 0, 0.015);
+    border-color: rgba(0, 0, 0, 0.03);
+}
+
+body.light-theme .comparison-list li {
+    background: rgba(0, 0, 0, 0.015);
+    border-color: rgba(0, 0, 0, 0.03);
+}
+
+body.light-theme .metric-divider {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .btn-secondary {
+    background: rgba(0, 0, 0, 0.03);
+    border-color: rgba(0, 0, 0, 0.06);
+    color: var(--text-primary);
+}
+
+body.light-theme .btn-secondary:hover {
+    background: rgba(0, 0, 0, 0.06);
+}
+
+body.light-theme .badge {
+    background: rgba(0, 0, 0, 0.03);
+}
+

@@ -131,5 +131,35 @@ def test_wal_recovery():
             if client_redis:
                 client_redis.delete(batch_writer.journal_key)
 
+def test_health_endpoint():
+    response = client.get("/health")
+    assert response.status_code == 200
+    data = response.json()
+    assert "status" in data
+    assert data["status"] in ["healthy", "unhealthy"]
+    assert "database" in data
+    assert "redis_nodes" in data
+
+def test_cache_stats_endpoint():
+    response = client.get("/cache/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert "total_requests" in data
+    assert "hits" in data
+    assert "misses" in data
+    assert "hit_rate" in data
+
+def test_batch_stats_endpoint():
+    response = client.get("/batch/stats")
+    assert response.status_code == 200
+    data = response.json()
+    assert "metrics" in data
+    assert "flush_interval_seconds" in data
+    assert "batch_size_limit" in data
+    assert "memory_queue_size" in data
+    assert "redis_wal_queue_size" in data
+    assert "write_reduction_percentage" in data
+
+
 
 
