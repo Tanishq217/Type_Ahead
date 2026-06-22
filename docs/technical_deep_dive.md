@@ -1,6 +1,6 @@
-# Academic Integrity & Viva (Mock Interview) Guide
+# Algorithms & Data Structures Technical Reference
 
-This document explains the core algorithms, time/space complexities, and implementation details of the Search Typeahead System, designed to prepare you for mock interviews and vivas.
+This document explains the core algorithms, time/space complexities, and implementation details of the Search Typeahead System.
 
 ---
 

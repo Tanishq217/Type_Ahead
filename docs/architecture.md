@@ -45,7 +45,7 @@ graph TD
   - Native index structures (B-tree on `query_text` column) allow rapid prefix queries: `query_text LIKE 'prefix%'`.
 - **Alternatives Considered**: 
   - *MongoDB*: High write throughput, but lacks native relational joins for precomputed trending tables and B-tree prefix pattern performance optimizations.
-  - *Elasticsearch*: Powerful search engine, but overkill for a simple typeahead assignment, introducing significant memory overhead and complex maintenance.
+  - *Elasticsearch*: Powerful search engine, but introduces significant memory overhead and complex infrastructure dependencies for basic prefix lookup systems.
 
 ### B. Cache Choice: Redis
 - **Why Chosen**:

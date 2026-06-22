@@ -22,19 +22,19 @@ docker-compose up -d --build && open http://localhost:8000
 
 ---
 
-## 🔍 How to Test the Project (For the Instructor)
+## 🔍 Verification & Testing Guide
 
 To see the system working, navigate to the web UI at `http://localhost:8000` and try these test cases:
 
 ### 1. Autocomplete Search Examples (Head Queries)
-We pre-loaded highly realistic question phrases into the database. Type these letters into the search box to watch autocomplete suggestions load instantly:
+The database is pre-seeded with highly realistic question phrases. You can type these prefixes in the search input box to test autocomplete suggestions:
 *   Type **`wh`** ➡️ Suggestions: *"what is python"*, *"what is consistent hashing"*, *"what is docker"*...
 *   Type **`ho`** ➡️ Suggestions: *"how to learn coding"*, *"how to build typeahead"*, *"how to use docker compose"*...
 *   Type **`wi`** ➡️ Suggestions: *"will there be database fallbacks"*, *"will there be consistent routing"*...
 
 ### 2. Search Submissions (`POST /search` & WAL buffering)
 1.  Type a new query like **`what is a database index`** and press **Enter** (or click the search button).
-2.  A success banner will read **`Searched`** (this is the dummy API response).
+2.  A success banner will read **`Searched`** (this is the API response).
 3.  Observe the **WAL Queue Size** increment under the *Batch Ingestion* panel. Every 3 seconds, a background daemon flushes this queue, updates PostgreSQL, and clears the cache for that prefix.
 
 ### 3. Basic vs. Trending Sorting (Demonstrating Recency Weighting)
@@ -47,7 +47,7 @@ We pre-loaded highly realistic question phrases into the database. Type these le
 
 ## 🛠️ The 4 Core Engineering Concepts Explained
 
-For the viva/mock interview evaluation, here is a simplified explanation of the core technical requirements implemented:
+Here is a technical overview of the core architectural patterns implemented in this system:
 
 ### 1. Consistent Hashing Caching Ring (`consistent_hash.py`)
 *   **The Problem**: If we have 3 Redis cache servers and assign keys using a simple modulo hash (`hash(key) % 3`), adding or removing a Redis node changes the denominator. This immediately invalidates **100% of our cache keys**, causing a database overload.
